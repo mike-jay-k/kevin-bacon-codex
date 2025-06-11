@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Actor Collaboration Checker</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+    }
+    .container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    label {
+        display: block;
+        margin-top: 10px;
+    }
+    input {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+    }
+    button {
+        margin-top: 10px;
+        padding: 10px 15px;
+    }
+    #results {
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px solid #ccc;
+    }
+    .loading {
+        color: blue;
+    }
+    .error {
+        color: red;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Actor Collaboration Checker</h1>
+    <label for="actor1">Actor/Actress 1:</label>
+    <input type="text" id="actor1" placeholder="Enter first actor name">
+    <label for="actor2">Actor/Actress 2:</label>
+    <input type="text" id="actor2" placeholder="Enter second actor name">
+    <button id="searchBtn">Search</button>
+    <div id="results"></div>
+</div>
+<script>
+// Replace YOUR_API_KEY_HERE with your TMDb API key.
+// You can sign up for a free key at https://www.themoviedb.org/.
+const API_KEY = 'YOUR_API_KEY_HERE';
+const searchBtn = document.getElementById('searchBtn');
+const resultsDiv = document.getElementById('results');
+
+async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error('Network response was not ok');
+    }
+    return response.json();
+}
+
+async function getPersonId(name) {
+    const searchUrl = `https://api.themoviedb.org/3/search/person?api_key=${API_KEY}&query=${encodeURIComponent(name)}`;
+    const data = await fetchJson(searchUrl);
+    return data.results && data.results[0] ? data.results[0].id : null;
+}
+
+async function getMovieCredits(personId) {
+    const creditUrl = `https://api.themoviedb.org/3/person/${personId}/movie_credits?api_key=${API_KEY}`;
+    const data = await fetchJson(creditUrl);
+    return data.cast || [];
+}
+
+function findSharedMovies(filmography1, filmography2) {
+    const map = new Map();
+    filmography1.forEach(movie => {
+        map.set(`${movie.title} (${movie.release_date ? movie.release_date.slice(0,4) : 'N/A'})`, movie.id);
+    });
+    const shared = [];
+    filmography2.forEach(movie => {
+        const key = `${movie.title} (${movie.release_date ? movie.release_date.slice(0,4) : 'N/A'})`;
+        if (map.has(key)) {
+            shared.push(key);
+        }
+    });
+    return shared;
+}
+
+async function search() {
+    const actor1 = document.getElementById('actor1').value.trim();
+    const actor2 = document.getElementById('actor2').value.trim();
+
+    if (!actor1 || !actor2) {
+        resultsDiv.innerHTML = '<p class="error">Please enter two actor names.</p>';
+        return;
+    }
+
+    resultsDiv.innerHTML = '<p class="loading">Loading...</p>';
+
+    try {
+        const [id1, id2] = await Promise.all([getPersonId(actor1), getPersonId(actor2)]);
+        if (!id1 || !id2) {
+            resultsDiv.innerHTML = '<p class="error">One or both actors not found.</p>';
+            return;
+        }
+
+        const [films1, films2] = await Promise.all([getMovieCredits(id1), getMovieCredits(id2)]);
+        const sharedMovies = findSharedMovies(films1, films2);
+        if (sharedMovies.length) {
+            const list = sharedMovies.map(m => `<li>${m}</li>`).join('');
+            resultsDiv.innerHTML = `<p>Shared movies:</p><ul>${list}</ul>`;
+        } else {
+            resultsDiv.innerHTML = '<p>No shared movies found.</p>';
+        }
+    } catch (err) {
+        console.error(err);
+        resultsDiv.innerHTML = '<p class="error">Error fetching data. Please try again.</p>';
+    }
+}
+
+searchBtn.addEventListener('click', search);
+</script>
+</body>
+</html>
